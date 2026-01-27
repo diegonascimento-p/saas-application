@@ -1,0 +1,20 @@
+{
+  "name": "data-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function for product data",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.1693.0",
+    "pg": "^8.17.2"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.160",
+    "@types/node": "^25.0.10",
+    "@types/pg": "^8.16.0",
+    "typescript": "^5.9.3"
+  }
+}

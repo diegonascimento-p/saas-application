@@ -47,3 +47,14 @@ Thumbs.db
 *.temp
 .cache/
 .eslintcache
+
+# Frontend build files
+frontend/build/
+frontend/node_modules/
+
+# Sensitive data
+auth-response.json
+idtoken.txt
+outputs.json
+*.token
+*.secret

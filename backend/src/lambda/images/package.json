@@ -1,0 +1,20 @@
+{
+  "name": "images-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function to handle S3 image operations",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "bundle": "npm run build && npm run package",
+    "package": "cd dist && zip -r ../bundle.zip ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.490.0",
+    "@aws-sdk/s3-request-presigner": "^3.490.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.119",
+    "@types/node": "^18.17.0",
+    "typescript": "^5.1.6"
+  }
+}

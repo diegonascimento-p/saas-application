@@ -1,0 +1,78 @@
+# Criar diretórios
+New-Item -ItemType Directory -Path .github/workflows -Force
+
+@'
+name: Deploy Frontend to S3
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+  workflow_dispatch: 
+
+env:
+  AWS_REGION: us-east-2
+  S3_BUCKET: saas-frontend-production 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Build React app
+      run: |
+        cd frontend
+        CI=false npm run build
+      env:
+        REACT_APP_API_ENDPOINT: ${{ secrets.REACT_APP_API_ENDPOINT }}
+        REACT_APP_USER_POOL_ID: ${{ secrets.REACT_APP_USER_POOL_ID }}
+        REACT_APP_USER_POOL_CLIENT_ID: ${{ secrets.REACT_APP_USER_POOL_CLIENT_ID }}
+        REACT_APP_REGION: us-east-2
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v3
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Deploy to S3
+      run: |
+        echo "🚀 Deploying to S3 bucket: ${{ env.S3_BUCKET }}"
+        aws s3 sync frontend/build/ s3://${{ env.S3_BUCKET }} \
+          --delete \
+          --cache-control "max-age=31536000,public" \
+          --exclude "index.html" \
+          --exclude "asset-manifest.json"
+          
+        aws s3 cp frontend/build/index.html s3://${{ env.S3_BUCKET }}/index.html \
+          --cache-control "max-age=0,no-cache,no-store,must-revalidate"
+        
+        echo "✅ Deployment completed!"
+
+    - name: Display Deployment URL
+      run: |
+        echo "🌐 Your application is live at:"
+        echo "http://${{ env.S3_BUCKET }}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
+        echo ""
+        echo "📋 Next steps:"
+        echo "1. Configure CORS in S3 if needed"
+        echo "2. Set up CloudFront for HTTPS (optional)"
+        echo "3. Configure custom domain (optional)"
+'@ | Out-File -FilePath .github/workflows/deploy-frontend.yml -Encoding UTF8
