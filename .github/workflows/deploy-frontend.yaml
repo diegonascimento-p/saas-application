@@ -19,51 +19,55 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
-    - name: Install dependencies
-      run: |
-        cd frontend
-        npm ci
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
 
-    - name: Build React app
-      run: |
-        cd frontend
-        CI=false npm run build
-      env:
-        REACT_APP_API_ENDPOINT: ${{ secrets.REACT_APP_API_ENDPOINT }}
-        REACT_APP_USER_POOL_ID: ${{ secrets.REACT_APP_USER_POOL_ID }}
-        REACT_APP_USER_POOL_CLIENT_ID: ${{ secrets.REACT_APP_USER_POOL_CLIENT_ID }}
-        REACT_APP_REGION: us-east-2
+      - name: Build React app
+        run: |
+          cd frontend
+          CI=false npm run build
+        env:
+          REACT_APP_API_ENDPOINT: ${{ secrets.REACT_APP_API_ENDPOINT }}
+          REACT_APP_USER_POOL_ID: ${{ secrets.REACT_APP_USER_POOL_ID }}
+          REACT_APP_USER_POOL_CLIENT_ID: ${{ secrets.REACT_APP_USER_POOL_CLIENT_ID }}
+          REACT_APP_REGION: us-east-2
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Deploy to S3
-      run: |
-        echo "Deploying to S3 bucket: $S3_BUCKET"
-        aws s3 sync frontend/build/ s3://$S3_BUCKET \
-          --delete \
-          --cache-control "max-age=31536000,public"
-        echo "Deployment completed!"
+      - name: Deploy HTML (no cache)
+        run: |
+          aws s3 sync frontend/build/ s3://$S3_BUCKET \
+            --delete \
+            --exclude "*" \
+            --include "*.html" \
+            --cache-control "no-cache,no-store,must-revalidate"
 
-    - name: Display Deployment URL
-      run: |
-        echo "Your application is live at:"
-        echo "http://$S3_BUCKET.s3-website-$AWS_REGION.amazonaws.com"
-        echo ""
-        echo "CI/CD Pipeline Successful!"
+      - name: Deploy assets (long cache)
+        run: |
+          aws s3 sync frontend/build/ s3://$S3_BUCKET \
+            --exclude "*.html" \
+            --cache-control "max-age=31536000,public"
+
+      - name: Display Deployment URL
+        run: |
+          echo "Your application is live at:"
+          echo "http://$S3_BUCKET.s3-website-$AWS_REGION.amazonaws.com"
