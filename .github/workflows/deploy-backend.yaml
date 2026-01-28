@@ -43,18 +43,25 @@ jobs:
         # Build TypeScript
         npx tsc --version
         npx tsc || echo "TypeScript compilation may have warnings"
+
+        echo "==== DIST CONTENT ===="
+        ls -la dist || true
+
+        echo "==== ROOT CONTENT ===="
+        ls -la .
+
+        echo "==== BUNDLE BEFORE COPY ===="
+        ls -la bundle || true
         
         # Create bundle directory
         mkdir -p bundle
         
         # Copy compiled JavaScript
         if [ -f "index.js" ]; then
-          cp index.js bundle/
-        elif [ -f "dist/index.js" ]; then
-          cp dist/index.js bundle/
+          cp dist/index.js bundle/index.js
         else
-          # Create minimal fallback
-          echo 'exports.handler = async (event) => { return { statusCode: 200, body: "Lambda initialized" }; }' > bundle/index.js
+        echo "❌ dist/index.js not found"
+        exit 1
         fi
         
         # Copy AWS SDK dependencies
