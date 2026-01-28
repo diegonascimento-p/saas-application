@@ -1,0 +1,81 @@
+name: Deploy Backend with CDK
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "18"
+        cache: "npm"
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install CDK dependencies
+      run: |
+        cd backend
+        npm ci
+        npm install -g aws-cdk@latest
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v3
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Bootstrap CDK (if needed)
+      run: |
+        # Get AWS Account ID from credentials
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "Account ID: $ACCOUNT_ID"
+        
+        cd backend
+        npx cdk bootstrap aws://$ACCOUNT_ID/${{ env.AWS_REGION }} --force
+
+    - name: Build and deploy CDK
+      run: |
+        cd backend
+        npm run build
+        
+        # Deploy all stacks
+        npx cdk deploy --all --require-approval never
+        
+        echo "✅ Backend deployed successfully!"
+        
+        # Try to get outputs
+        npx cdk deploy --outputs-file cdk-outputs.json 2>/dev/null || true
+        
+        if [ -f cdk-outputs.json ]; then
+          echo "📋 CDK Outputs:"
+          cat cdk-outputs.json
+        fi
+
+    - name: Display Deployment Info
+      run: |
+        echo "🚀 AWS Backend Infrastructure Deployed!"
+        echo "📍 Region: ${{ env.AWS_REGION }}"
+        echo ""
+        echo "🏗️ Services deployed:"
+        echo "• Amazon Cognito - User authentication"
+        echo "• API Gateway - REST API endpoints"
+        echo "• Lambda Functions - Serverless backend"
+        echo "• S3 Bucket - Image storage"
+        echo "• RDS PostgreSQL - Database"
+        echo ""
+        echo "🔗 Your API is ready to use!"
