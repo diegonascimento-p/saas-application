@@ -84,23 +84,7 @@ export class SaasBackendStack extends cdk.Stack {
     const imagesLambda = new lambda.Function(this, "ImagesLambda", {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: "index.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../src/lambda/images"), {
-        bundling: {
-          command: [
-            'sh', '-c', [
-              'npm install',
-              'npm run build || true',
-              'cp -r dist/* . 2>/dev/null || true',
-              'cp index.js . 2>/dev/null || true',
-              'mkdir -p node_modules',
-              'cp -r node_modules/@aws-sdk node_modules/ 2>/dev/null || echo "AWS SDK not found locally"',
-              'echo "Bundling completed"'
-            ].join(' && ')
-          ],
-          image: lambda.Runtime.NODEJS_18_X.bundlingImage,
-          user: "root",
-        }
-      }),
+      code: lambda.Code.fromAsset(path.join(__dirname, "../src/lambda/images/bundle")),
       environment: {
         BUCKET_NAME: imageBucket.bucketName,
         REGION: this.region,
@@ -165,40 +149,12 @@ export class SaasBackendStack extends cdk.Stack {
     dataResource.addMethod("GET", new apigateway.LambdaIntegration(dataLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
-      methodResponses: [
-        {
-          statusCode: "200",
-          responseParameters: {
-            "method.response.header.Access-Control-Allow-Origin": true,
-          },
-        },
-        {
-          statusCode: "401",
-          responseParameters: {
-            "method.response.header.Access-Control-Allow-Origin": true,
-          },
-        },
-      ],
     });
 
     const imagesResource = api.root.addResource("images");
     imagesResource.addMethod("GET", new apigateway.LambdaIntegration(imagesLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
-      methodResponses: [
-        {
-          statusCode: "200",
-          responseParameters: {
-            "method.response.header.Access-Control-Allow-Origin": true,
-          },
-        },
-        {
-          statusCode: "401",
-          responseParameters: {
-            "method.response.header.Access-Control-Allow-Origin": true,
-          },
-        },
-      ],
     });
 
     new cdk.CfnOutput(this, "UserPoolId", { 

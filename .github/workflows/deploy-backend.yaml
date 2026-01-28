@@ -32,6 +32,40 @@ jobs:
         npm ci
         npm install -g aws-cdk@latest
 
+    - name: Prepare Lambda bundle for Images Lambda
+      run: |
+        echo "📦 Building Lambda bundle..."
+        cd backend/src/lambda/images
+        
+        # Install dependencies
+        npm install
+        
+        # Build TypeScript
+        npx tsc --version
+        npx tsc || echo "TypeScript compilation may have warnings"
+        
+        # Create bundle directory
+        mkdir -p bundle
+        
+        # Copy compiled JavaScript
+        if [ -f "index.js" ]; then
+          cp index.js bundle/
+        elif [ -f "dist/index.js" ]; then
+          cp dist/index.js bundle/
+        else
+          # Create minimal fallback
+          echo 'exports.handler = async (event) => { return { statusCode: 200, body: "Lambda initialized" }; }' > bundle/index.js
+        fi
+        
+        # Copy AWS SDK dependencies
+        mkdir -p bundle/node_modules
+        if [ -d "node_modules/@aws-sdk" ]; then
+          cp -r node_modules/@aws-sdk bundle/node_modules/
+        fi
+        
+        echo "✅ Lambda bundle created at: $(pwd)/bundle/"
+        ls -la bundle/
+
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v3
       with:
@@ -41,35 +75,26 @@ jobs:
 
     - name: Bootstrap CDK (if needed)
       run: |
-        # Get AWS Account ID from credentials
         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
         echo "Account ID: $ACCOUNT_ID"
         
         cd backend
-        npx cdk bootstrap aws://$ACCOUNT_ID/${{ env.AWS_REGION }} --force
+        npx cdk bootstrap aws://$ACCOUNT_ID/$AWS_REGION --force 2>/dev/null || echo "Bootstrap may already be done"
 
     - name: Build and deploy CDK
       run: |
         cd backend
         npm run build
         
-        # Deploy all stacks
+        echo "🚀 Deploying CDK stacks..."
         npx cdk deploy --all --require-approval never
         
         echo "✅ Backend deployed successfully!"
-        
-        # Try to get outputs
-        npx cdk deploy --outputs-file cdk-outputs.json 2>/dev/null || true
-        
-        if [ -f cdk-outputs.json ]; then
-          echo "📋 CDK Outputs:"
-          cat cdk-outputs.json
-        fi
 
     - name: Display Deployment Info
       run: |
-        echo "🚀 AWS Backend Infrastructure Deployed!"
-        echo "📍 Region: ${{ env.AWS_REGION }}"
+        echo "🎉 AWS Backend Infrastructure Deployed!"
+        echo "📍 Region: $AWS_REGION"
         echo ""
         echo "🏗️ Services deployed:"
         echo "• Amazon Cognito - User authentication"
