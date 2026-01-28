@@ -5,7 +5,12 @@ on:
     branches: [ main ]
     paths:
       - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
 
 env:
   AWS_REGION: us-east-2
@@ -50,15 +55,15 @@ jobs:
 
     - name: Deploy to S3
       run: |
-        echo "🚀 Deploying to S3 bucket: $S3_BUCKET"
+        echo "Deploying to S3 bucket: $S3_BUCKET"
         aws s3 sync frontend/build/ s3://$S3_BUCKET \
           --delete \
           --cache-control "max-age=31536000,public"
-        echo "✅ Deployment completed!"
+        echo "Deployment completed!"
 
     - name: Display Deployment URL
       run: |
-        echo "🌐 Your application is live at:"
+        echo "Your application is live at:"
         echo "http://$S3_BUCKET.s3-website-$AWS_REGION.amazonaws.com"
         echo ""
-        echo "✅ CI/CD Pipeline Successful!"
+        echo "CI/CD Pipeline Successful!"
