@@ -41,16 +41,59 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     fetchData();
   }, []);
 
+  const getAuthToken = async (): Promise<string> => {
+    try {
+      const session = await fetchAuthSession();
+      
+      if (!session.tokens || !session.tokens.idToken) {
+        throw new Error('No authentication session found');
+      }
+      
+      const idToken = session.tokens.idToken;
+      
+      if (typeof idToken === 'string') {
+        return idToken;
+      }
+      
+      if (typeof idToken === 'object' && idToken !== null) {
+        if ('jwtToken' in idToken && typeof (idToken as any).jwtToken === 'string') {
+          return (idToken as any).jwtToken;
+        }
+        
+        const tokenString = idToken.toString();
+        if (tokenString.startsWith('eyJ')) {
+          return tokenString;
+        }
+      }
+      
+      throw new Error('Could not extract valid token');
+    } catch (error) {
+      console.error('Error getting token from session:', error);
+      
+      const tokenKey = Object.keys(localStorage).find(key => 
+        key.includes('CognitoIdentityServiceProvider') && key.includes('idToken')
+      );
+      
+      if (tokenKey) {
+        const token = localStorage.getItem(tokenKey);
+        if (token && token.startsWith('eyJ')) {
+          console.log('Using token from localStorage');
+          return token;
+        }
+      }
+      
+      throw new Error('No valid authentication token found');
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      // Verificar se estamos usando autenticação real (não demo)
       if (user.token && !user.token.startsWith('demo-')) {
         await fetchRealData();
       } else {
-        // Usar mock data para demo
         await fetchMockData();
       }
     } catch (err: any) {
@@ -64,33 +107,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
   const fetchRealData = async () => {
     try {
-      // Obter sessão atual do Cognito (Amplify v6)
-      const session = await fetchAuthSession();
-      
-      if (!session.tokens || !session.tokens.idToken) {
-        throw new Error('No authentication session found');
-      }
-      
-      const token = session.tokens.idToken.toString();
+      const token = await getAuthToken();
       
       console.log('Using real API with token:', token.substring(0, 50) + '...');
       
-      // Configurar axios com token de autenticação
       const api = axios.create({
         baseURL: apiEndpoint,
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        withCredentials: true,
       });
 
-      // Buscar dados da API Gateway (em paralelo)
       const [productsResponse, imagesResponse] = await Promise.allSettled([
         api.get('/data'),
         api.get('/images')
       ]);
 
-      // Processar resposta dos produtos
       if (productsResponse.status === 'fulfilled') {
         const productsData = productsResponse.value.data;
         console.log('Products API response:', productsData);
@@ -100,7 +134,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         throw new Error('Failed to fetch products');
       }
 
-      // Processar resposta das imagens
       if (imagesResponse.status === 'fulfilled') {
         const imagesData = imagesResponse.value.data;
         console.log('Images API response:', imagesData);
@@ -268,7 +301,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
           },
         ];
 
-    // Simular delay de rede
     await new Promise(resolve => setTimeout(resolve, 800));
     
     setProducts(mockProducts);
@@ -298,18 +330,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     }
     
     try {
-      const session = await fetchAuthSession();
-      
-      if (!session.tokens || !session.tokens.idToken) {
-        throw new Error('No authentication session found');
-      }
-      
-      const token = session.tokens.idToken.toString();
+      const token = await getAuthToken();
       
       const response = await axios.get(`${apiEndpoint}data`, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        withCredentials: true,
       });
       
       alert(`API Test Successful!\nStatus: ${response.status}\nData received: ${JSON.stringify(response.data, null, 2).substring(0, 200)}...`);
