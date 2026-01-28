@@ -129,10 +129,19 @@ export class SaasBackendStack extends cdk.Stack {
       restApiName: "SaaS Platform API",
       description: "API for SaaS application with PostgreSQL backend",
       defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
-        allowCredentials: false,
+        allowOrigins: [
+          "http://localhost:3000",
+          "http://saas-frontend-20260127162301.s3-website.us-east-2.amazonaws.com"
+        ],
+        allowMethods: ["GET", "OPTIONS"],  // ← Especifique apenas os necessários
+        allowHeaders: [
+          "Content-Type",
+          "Authorization",
+          "X-Amz-Date",
+          "X-Api-Key",
+          "X-Amz-Security-Token"
+        ],
+        allowCredentials: true, 
       },
       deployOptions: {
         stageName: "prod",

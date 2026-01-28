@@ -82,8 +82,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Credentials': true,
+          // ✅ REMOVIDO: 'Access-Control-Allow-Origin': '*',
+          // ✅ REMOVIDO: 'Access-Control-Allow-Credentials': true,
         },
         body: JSON.stringify({
           images: filteredImages,
@@ -116,8 +116,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Credentials': true,
+          // ✅ REMOVIDO: 'Access-Control-Allow-Origin': '*',
+          // ✅ REMOVIDO: 'Access-Control-Allow-Credentials': true,
         },
         body: JSON.stringify({
           images: fallbackImages,
@@ -140,7 +140,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        // ✅ REMOVIDO: 'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({
         error: 'Internal server error',
