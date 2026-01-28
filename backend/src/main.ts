@@ -132,7 +132,7 @@ export class SaasBackendStack extends cdk.Stack {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
         allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
-        allowCredentials: true,
+        allowCredentials: false,
       },
       deployOptions: {
         stageName: "prod",
