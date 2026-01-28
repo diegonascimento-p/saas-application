@@ -146,15 +146,74 @@ export class SaasBackendStack extends cdk.Stack {
     });
 
     const dataResource = api.root.addResource("data");
+    const imagesResource = api.root.addResource("images");
+
+    dataResource.addMethod("OPTIONS", new apigateway.MockIntegration({
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token'",
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Credentials': "'true'"
+        },
+      }],
+      passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        "application/json": JSON.stringify({ statusCode: 200 })
+      },
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Credentials': true,
+        },
+      }],
+      apiKeyRequired: false,
+      authorizationType: apigateway.AuthorizationType.NONE,
+    });
+
+    imagesResource.addMethod("OPTIONS", new apigateway.MockIntegration({
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token'",
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Credentials': "'true'"
+        },
+      }],
+      passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        "application/json": JSON.stringify({ statusCode: 200 })
+      },
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Credentials': true,
+        },
+      }],
+      apiKeyRequired: false,
+      authorizationType: apigateway.AuthorizationType.NONE,
+    });
+
     dataResource.addMethod("GET", new apigateway.LambdaIntegration(dataLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: undefined,
     });
 
-    const imagesResource = api.root.addResource("images");
     imagesResource.addMethod("GET", new apigateway.LambdaIntegration(imagesLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: undefined,
     });
 
     new cdk.CfnOutput(this, "UserPoolId", { 
