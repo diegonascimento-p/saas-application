@@ -1,4 +1,3 @@
-// backend/lib/main.ts
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -6,7 +5,6 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as path from "path";
 import { DatabaseStack } from "../lib/database-stack";
 
@@ -19,7 +17,6 @@ export class SaasBackendStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
-    // S3 Bucket for images
     const imageBucket = new s3.Bucket(this, "SaasImagesBucket", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
@@ -32,7 +29,6 @@ export class SaasBackendStack extends cdk.Stack {
       ],
     });
 
-    // Cognito User Pool for authentication
     const userPool = new cognito.UserPool(this, "SaasUserPool", {
       selfSignUpEnabled: true,
       signInAliases: { email: true },
@@ -46,7 +42,6 @@ export class SaasBackendStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // User groups for role-based access control
     new cognito.CfnUserPoolGroup(this, "StandardGroup", {
       userPoolId: userPool.userPoolId,
       groupName: "Standard",
@@ -68,7 +63,6 @@ export class SaasBackendStack extends cdk.Stack {
       generateSecret: false,
     });
 
-    // Lambda function to fetch data from PostgreSQL
     const dataLambda = new lambda.Function(this, "DataLambda", {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: "index.handler",
@@ -87,12 +81,26 @@ export class SaasBackendStack extends cdk.Stack {
       memorySize: 256,
     });
 
-    // Lambda function to get signed URLs for S3 images
-    // USANDO bundle que você criou
     const imagesLambda = new lambda.Function(this, "ImagesLambda", {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: "index.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../src/lambda/images/bundle")),
+      code: lambda.Code.fromAsset(path.join(__dirname, "../src/lambda/images"), {
+        bundling: {
+          command: [
+            'sh', '-c', [
+              'npm install',
+              'npm run build || true',
+              'cp -r dist/* . 2>/dev/null || true',
+              'cp index.js . 2>/dev/null || true',
+              'mkdir -p node_modules',
+              'cp -r node_modules/@aws-sdk node_modules/ 2>/dev/null || echo "AWS SDK not found locally"',
+              'echo "Bundling completed"'
+            ].join(' && ')
+          ],
+          image: lambda.Runtime.NODEJS_18_X.bundlingImage,
+          user: "root",
+        }
+      }),
       environment: {
         BUCKET_NAME: imageBucket.bucketName,
         REGION: this.region,
@@ -102,13 +110,10 @@ export class SaasBackendStack extends cdk.Stack {
       memorySize: 256,
     });
 
-    // Grant permissions to Lambda functions
     imageBucket.grantRead(imagesLambda);
     
-    // Configure database access for dataLambda
     databaseStack.databaseSecret.grantRead(dataLambda);
     
-    // Add database access policy manually
     dataLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
         'secretsmanager:GetSecretValue',
@@ -121,7 +126,6 @@ export class SaasBackendStack extends cdk.Stack {
       ],
     }));
     
-    // Add policy to allow Lambda to access Cognito for user verification
     dataLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
         "cognito-idp:AdminGetUser",
@@ -137,7 +141,6 @@ export class SaasBackendStack extends cdk.Stack {
       resources: [userPool.userPoolArn],
     }));
 
-    // API Gateway with CORS configuration
     const api = new apigateway.RestApi(this, "SaasApi", {
       restApiName: "SaaS Platform API",
       description: "API for SaaS application with PostgreSQL backend",
@@ -152,14 +155,12 @@ export class SaasBackendStack extends cdk.Stack {
       },
     });
 
-    // Cognito authorizer for API Gateway
     const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "CognitoAuthorizer", {
       cognitoUserPools: [userPool],
       authorizerName: "CognitoAuthorizer",
       identitySource: "method.request.header.Authorization",
     });
 
-    // /data endpoint - retrieves user-specific data from PostgreSQL
     const dataResource = api.root.addResource("data");
     dataResource.addMethod("GET", new apigateway.LambdaIntegration(dataLambda), {
       authorizer,
@@ -180,7 +181,6 @@ export class SaasBackendStack extends cdk.Stack {
       ],
     });
 
-    // /images endpoint - retrieves signed URLs for S3 images
     const imagesResource = api.root.addResource("images");
     imagesResource.addMethod("GET", new apigateway.LambdaIntegration(imagesLambda), {
       authorizer,
@@ -201,44 +201,34 @@ export class SaasBackendStack extends cdk.Stack {
       ],
     });
 
-    // Outputs for easy reference
     new cdk.CfnOutput(this, "UserPoolId", { 
       value: userPool.userPoolId,
-      description: "Cognito User Pool ID for authentication",
     });
     
     new cdk.CfnOutput(this, "UserPoolClientId", { 
       value: userPoolClient.userPoolClientId,
-      description: "Cognito User Pool Client ID",
     });
     
     new cdk.CfnOutput(this, "ApiEndpoint", { 
       value: api.url,
-      description: "API Gateway endpoint URL",
     });
     
     new cdk.CfnOutput(this, "BucketName", { 
       value: imageBucket.bucketName,
-      description: "S3 bucket name for storing images",
     });
     
     new cdk.CfnOutput(this, "Region", { 
       value: this.region,
-      description: "AWS region where resources are deployed",
     });
     
-    // New output for database endpoint
     new cdk.CfnOutput(this, "DatabaseEndpoint", { 
       value: databaseStack.database.dbInstanceEndpointAddress,
-      description: "RDS PostgreSQL endpoint",
     });
   }
 }
 
-// Main application entry point
 const app = new cdk.App();
 
-// Database Stack - PostgreSQL RDS instance
 const databaseStack = new DatabaseStack(app, "SaasDatabaseStack", {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
@@ -247,8 +237,6 @@ const databaseStack = new DatabaseStack(app, "SaasDatabaseStack", {
   description: "PostgreSQL RDS database for SaaS application",
 });
 
-// Backend Stack - Cognito, S3, API Gateway, and Lambda functions
-// Pass databaseStack as parameter
 const backendStack = new SaasBackendStack(
   app, 
   "SaasBackendStack", 
@@ -262,11 +250,8 @@ const backendStack = new SaasBackendStack(
   }
 );
 
-// Add dependency - Database must be created before backend
 backendStack.addDependency(databaseStack);
 
-// Add tags for resource organization and cost tracking
 cdk.Tags.of(app).add("Project", "SaaS-Application");
 cdk.Tags.of(app).add("Environment", "Development");
 cdk.Tags.of(app).add("ManagedBy", "AWS-CDK");
-cdk.Tags.of(app).add("Owner", "DevelopmentTeam");
