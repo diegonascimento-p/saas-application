@@ -14,100 +14,69 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: "18"
-        cache: "npm"
-        cache-dependency-path: backend/package-lock.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
 
-    - name: Install CDK dependencies
-      run: |
-        cd backend
-        npm ci
-        npm install -g aws-cdk@latest
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm ci
+          npm install -g aws-cdk@latest
 
-    - name: Prepare Lambda bundle for Images Lambda
-      run: |
-        echo "📦 Building Lambda bundle..."
-        cd backend/src/lambda/images
-        
-        # Install dependencies
-        npm install
-        
-        # Build TypeScript
-        npx tsc --version
-        npx tsc || echo "TypeScript compilation may have warnings"
+      - name: Build Images Lambda bundle
+        run: |
+          cd backend/src/lambda/images
 
-        echo "==== DIST CONTENT ===="
-        ls -la dist || true
+          npm install
 
-        echo "==== ROOT CONTENT ===="
-        ls -la .
+          npx tsc
 
-        echo "==== BUNDLE BEFORE COPY ===="
-        ls -la bundle || true
-        
-        # Create bundle directory
-        mkdir -p bundle
-        
-        # Copy compiled JavaScript
-        if [ -f "index.js" ]; then
-          cp dist/index.js bundle/index.js
-        else
-        echo "❌ dist/index.js not found"
-        exit 1
-        fi
-        
-        # Copy AWS SDK dependencies
-        mkdir -p bundle/node_modules
-        if [ -d "node_modules/@aws-sdk" ]; then
-          cp -r node_modules/@aws-sdk bundle/node_modules/
-        fi
-        
-        echo "✅ Lambda bundle created at: $(pwd)/bundle/"
-        ls -la bundle/
+          mkdir -p bundle
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+          if [ -f "dist/index.js" ]; then
+            cp dist/index.js bundle/index.js
+          else
+            echo "❌ dist/index.js not found"
+            exit 1
+          fi
 
-    - name: Bootstrap CDK (if needed)
-      run: |
-        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-        echo "Account ID: $ACCOUNT_ID"
-        
-        cd backend
-        npx cdk bootstrap aws://$ACCOUNT_ID/$AWS_REGION --force 2>/dev/null || echo "Bootstrap may already be done"
+          mkdir -p bundle/node_modules
+          if [ -d "node_modules/@aws-sdk" ]; then
+            cp -r node_modules/@aws-sdk bundle/node_modules/
+          fi
 
-    - name: Build and deploy CDK
-      run: |
-        cd backend
-        npm run build
-        
-        echo "🚀 Deploying CDK stacks..."
-        npx cdk deploy --all --require-approval never
-        
-        echo "✅ Backend deployed successfully!"
+          echo "✅ Bundle content:"
+          ls -la bundle
 
-    - name: Display Deployment Info
-      run: |
-        echo "🎉 AWS Backend Infrastructure Deployed!"
-        echo "📍 Region: $AWS_REGION"
-        echo ""
-        echo "🏗️ Services deployed:"
-        echo "• Amazon Cognito - User authentication"
-        echo "• API Gateway - REST API endpoints"
-        echo "• Lambda Functions - Serverless backend"
-        echo "• S3 Bucket - Image storage"
-        echo "• RDS PostgreSQL - Database"
-        echo ""
-        echo "🔗 Your API is ready to use!"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Bootstrap CDK (if needed)
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          cd backend
+          npx cdk bootstrap aws://$ACCOUNT_ID/$AWS_REGION || true
+
+      - name: Build and deploy CDK stacks
+        run: |
+          cd backend
+          npm run build
+          npx cdk deploy --all --require-approval never
+
+      - name: Display Deployment Info
+        run: |
+          echo "Backend deployed successfully"
+          echo "Region: $AWS_REGION"
