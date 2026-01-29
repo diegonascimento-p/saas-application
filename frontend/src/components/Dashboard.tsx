@@ -4,29 +4,27 @@ import { User } from '../App';
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import axios from 'axios';
 
-// Tipos atualizados para os dados REAIS da API
 type RealProduct = {
-  id: string;  // UUID string
+  id: string;
   name: string;
   description: string;
   category: string;
-  price: string;  // String vinda da API
-  image_key: string;  // Nome do arquivo da imagem
+  price: string;
+  image_key: string;
   is_active: boolean;
   created_at: string;
 };
 
 type RealImage = {
   id: number;
-  name: string;  // Nome do arquivo (ex: "laptop.jpg")
-  url: string;   // URL completa do S3
+  name: string;
+  url: string;
   category: string;
   size?: string;
   uploaded?: string;
   description?: string;
 };
 
-// Tipos para mock data (modo demo)
 type MockProduct = {
   id: number;
   name: string;
@@ -117,7 +115,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
     if (productsResponse.status === 'fulfilled') {
       const data = productsResponse.value.data;
-      // A API pode retornar diretamente o array ou dentro de uma propriedade 'products'
       const productsArray = Array.isArray(data) ? data : (data.products || data);
       setRealProducts(productsArray);
     } else {
@@ -233,7 +230,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
           },
         ];
 
-    // Simular delay de rede
     await new Promise((r) => setTimeout(r, 600));
     
     setMockProducts(mockProductsData);
@@ -268,10 +264,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     fetchData();
   };
 
-  // Função para encontrar a imagem correta para um produto
   const getProductImageUrl = (imageKey: string): string => {
     if (!usingRealApi) {
-      // Modo demo - usar imagem genérica
       return 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&w=300&h=200&fit=crop';
     }
     
@@ -295,7 +289,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     );
   }
 
-  // Dados atuais baseados no modo
   const currentProducts = usingRealApi ? realProducts : mockProducts;
   const currentImages = usingRealApi ? realImages : mockImages;
 

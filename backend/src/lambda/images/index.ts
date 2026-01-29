@@ -3,6 +3,14 @@ import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 
+const corsHeaders = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token',
+  'Access-Control-Allow-Methods': 'GET,OPTIONS',
+};
+
 interface S3Object {
   Key?: string;
   Size?: number;
@@ -29,7 +37,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     
     const isAdmin = userGroups.includes('Admin');
     
-    // AWS SDK v3
     const s3Client = new S3Client({ 
       region: process.env.REGION || 'us-east-2' 
     });
@@ -80,11 +87,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       
       return {
         statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          // ✅ REMOVIDO: 'Access-Control-Allow-Origin': '*',
-          // ✅ REMOVIDO: 'Access-Control-Allow-Credentials': true,
-        },
+        headers: corsHeaders,
         body: JSON.stringify({
           images: filteredImages,
           user: {
@@ -114,11 +117,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       
       return {
         statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          // ✅ REMOVIDO: 'Access-Control-Allow-Origin': '*',
-          // ✅ REMOVIDO: 'Access-Control-Allow-Credentials': true,
-        },
+        headers: corsHeaders,
         body: JSON.stringify({
           images: fallbackImages,
           metadata: {
@@ -138,10 +137,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        // ✅ REMOVIDO: 'Access-Control-Allow-Origin': '*',
-      },
+      headers: corsHeaders,
       body: JSON.stringify({
         error: 'Internal server error',
         message: error.message || 'Failed to retrieve images',

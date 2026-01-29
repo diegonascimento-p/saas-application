@@ -133,7 +133,7 @@ export class SaasBackendStack extends cdk.Stack {
           "http://localhost:3000",
           "http://saas-frontend-20260127162301.s3-website.us-east-2.amazonaws.com"
         ],
-        allowMethods: ["GET", "OPTIONS"],  // ← Especifique apenas os necessários
+        allowMethods: ["GET", "OPTIONS"],
         allowHeaders: [
           "Content-Type",
           "Authorization",

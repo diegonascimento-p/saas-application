@@ -1,364 +1,201 @@
-// backend/src/lambda/data/index.ts
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { Client } from 'pg';
-import { SecretsManager } from 'aws-sdk';
+import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 
-const secretsManager = new SecretsManager();
-
-interface DatabaseConfig {
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  password: string;
-  ssl: any;
+interface S3Object {
+  Key?: string;
+  Size?: number;
+  LastModified?: Date;
 }
 
-async function getDatabaseConfig(): Promise<DatabaseConfig> {
-  const secretArn = process.env.DB_SECRET_ARN!;
-  
-  try {
-    const secret = await secretsManager
-      .getSecretValue({ SecretId: secretArn })
-      .promise();
-    
-    const secretString = JSON.parse(secret.SecretString!);
-    
-    return {
-      host: process.env.DB_ENDPOINT || secretString.host,
-      port: parseInt(process.env.DB_PORT || secretString.port || '5432'),
-      database: process.env.DB_NAME || secretString.dbname || 'saasdb',
-      user: secretString.username || 'saasadmin',
-      password: secretString.password || '',
-      ssl: { rejectUnauthorized: false },
-    };
-  } catch (error) {
-    console.error('Error fetching database secret:', error);
-    
-    // Fallback para variáveis de ambiente diretas
-    return {
-      host: process.env.DB_ENDPOINT || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      database: process.env.DB_NAME || 'saasdb',
-      user: process.env.DB_USER || 'saasadmin',
-      password: process.env.DB_PASSWORD || '',
-      ssl: { rejectUnauthorized: false },
-    };
-  }
+interface Image {
+  id: number;
+  name: string;
+  url: string;
+  category: string;
+  size?: string;
+  uploaded?: string;
+  description?: string;
 }
 
-export const handler = async (
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
-  console.log('Data Lambda invoked');
-  
-  let client: Client | null = null;
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  console.log('Images Lambda - SDK v3 from Lambda environment');
   
   try {
-    // 1. Extrair informações do usuário do token Cognito
     const authContext = event.requestContext?.authorizer?.claims || {};
     const userGroups = authContext['cognito:groups'] || '';
     const userEmail = authContext.email || 'user@example.com';
-    const userId = authContext.sub || 'anonymous';
     
     const isAdmin = userGroups.includes('Admin');
     
-    console.log(`User: ${userEmail}, Groups: ${userGroups}, Admin: ${isAdmin}`);
+    // AWS SDK v3
+    const s3Client = new S3Client({ 
+      region: process.env.REGION || 'us-east-2' 
+    });
+    const bucketName = process.env.BUCKET_NAME!;
     
-    // 2. Tentar conectar ao banco de dados
+    console.log('Bucket name:', bucketName);
+    console.log('Region:', process.env.REGION);
+    
     try {
-      const dbConfig = await getDatabaseConfig();
-      console.log('DB Config:', { ...dbConfig, password: '***' });
+      const listCommand = new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: 'products/'
+      });
       
-      client = new Client(dbConfig);
-      await client.connect();
-      console.log('Successfully connected to PostgreSQL database');
+      const listResult = await s3Client.send(listCommand);
       
-      // 3. Query baseada no role do usuário
-      if (isAdmin) {
-        // ADMIN: Pega todos os usuários e produtos
-        const usersQuery = `
-          SELECT 
-            id,
-            email,
-            user_role as role,
-            profile_data,
-            created_at,
-            updated_at
-          FROM users 
-          ORDER BY created_at DESC
-        `;
-        
-        const productsQuery = `
-          SELECT 
-            id, 
-            name, 
-            description, 
-            category, 
-            price, 
-            image_key,
-            is_active,
-            created_at
-          FROM products 
-          WHERE is_active = true 
-          ORDER BY created_at DESC
-          LIMIT 10
-        `;
-        
-        const [usersResult, productsResult] = await Promise.all([
-          client.query(usersQuery),
-          client.query(productsQuery)
-        ]);
-        
-        const responseData = {
-          user: {
-            id: userId,
-            email: userEmail,
-            role: 'admin',
-            groups: userGroups,
-          },
-          users: usersResult.rows,
-          products: productsResult.rows,
-          metadata: {
-            totalUsers: usersResult.rows.length,
-            totalProducts: productsResult.rows.length,
-            isAdmin: true,
-            accessLevel: 'full',
-            timestamp: new Date().toISOString(),
-          },
-          message: 'Admin access - Full database access',
-        };
-        
-        return {
-          statusCode: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': true,
-          },
-          body: JSON.stringify(responseData),
-        };
-        
-      } else {
-        // STANDARD USER: Pega apenas seu perfil + produtos limitados
-        const userQuery = `
-          SELECT 
-            id,
-            email,
-            user_role as role,
-            profile_data,
-            created_at,
-            updated_at
-          FROM users 
-          WHERE email = $1
-          LIMIT 1
-        `;
-        
-        const productsQuery = `
-          SELECT 
-            id, 
-            name, 
-            description, 
-            category, 
-            price, 
-            image_key,
-            created_at
-          FROM products 
-          WHERE is_active = true 
-          AND category IN ('Electronics', 'Audio', 'Home')
-          ORDER BY created_at DESC 
-          LIMIT 3
-        `;
-        
-        const [userResult, productsResult] = await Promise.all([
-          client.query(userQuery, [userEmail]),
-          client.query(productsQuery)
-        ]);
-        
-        const userData = userResult.rows[0] || {
-          id: userId,
-          email: userEmail,
-          role: 'standard',
-          profile_data: { name: 'Standard User', department: 'General' },
-          created_at: new Date().toISOString(),
-        };
-        
-        const responseData = {
-          user: {
-            id: userId,
-            email: userEmail,
-            role: 'standard',
-            groups: userGroups,
-          },
-          userProfile: userData,
-          products: productsResult.rows,
-          metadata: {
-            totalProducts: productsResult.rows.length,
-            isAdmin: false,
-            accessLevel: 'limited',
-            timestamp: new Date().toISOString(),
-          },
-          message: 'Standard access - Limited data access',
-        };
-        
-        return {
-          statusCode: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': true,
-          },
-          body: JSON.stringify(responseData),
-        };
-      }
+      console.log('List result:', JSON.stringify({
+        keyCount: listResult.KeyCount,
+        contentsCount: listResult.Contents?.length || 0
+      }));
       
-    } catch (dbError: any) {
-      console.error('Database connection error:', dbError.message);
-      console.error('DB Error stack:', dbError.stack);
+      const images = await Promise.all(
+        (listResult.Contents || [])
+          .filter((obj: any) => obj.Key && obj.Key !== 'products/')
+          .map(async (obj: any, index: number) => {
+            const getObjectCommand = new GetObjectCommand({
+              Bucket: bucketName,
+              Key: obj.Key!,
+            });
+            
+            const signedUrl = await getSignedUrl(s3Client, getObjectCommand, {
+              expiresIn: 3600
+            });
+            
+            return {
+              id: index + 1,
+              name: obj.Key?.split('/').pop() || 'image.jpg',
+              url: signedUrl,
+              category: 'Products',
+              size: obj.Size ? `${Math.round(obj.Size / 1024)} KB` : 'Unknown',
+              uploaded: obj.LastModified?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+              description: `Product image ${index + 1}`,
+            };
+          })
+      );
       
-      // Continuar para o fallback de dados mock
-    }
-    
-    // 4. FALLBACK: Dados mock se o banco falhar
-    console.log('Using fallback mock data');
-    
-    if (isAdmin) {
+      const filteredImages = isAdmin ? images : images.slice(0, 3);
+      
       return {
         statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Credentials': true,
         },
         body: JSON.stringify({
+          images: filteredImages,
           user: {
-            id: userId,
             email: userEmail,
-            role: 'admin',
+            role: isAdmin ? 'admin' : 'standard',
             groups: userGroups,
           },
-          users: [
-            {
-              id: '1',
-              email: 'admin@saas-application.com',
-              role: 'admin',
-              profile_data: { name: 'Admin User', department: 'Management' },
-              created_at: new Date().toISOString(),
-            },
-            {
-              id: '2',
-              email: 'user@saas-application.com',
-              role: 'standard',
-              profile_data: { name: 'Standard User', department: 'Sales' },
-              created_at: new Date().toISOString(),
-            }
-          ],
-          products: [
-            {
-              id: 1,
-              name: 'Laptop Pro',
-              description: 'High-performance laptop',
-              category: 'Electronics',
-              price: 1299.99,
-              image_key: 'products/laptop-pro.jpg',
-            },
-            {
-              id: 2,
-              name: 'Wireless Headphones',
-              description: 'Noise-cancelling headphones',
-              category: 'Audio',
-              price: 249.99,
-              image_key: 'products/headphones.jpg',
-            },
-            {
-              id: 3,
-              name: 'Smart Watch',
-              description: 'Fitness and health tracker',
-              category: 'Electronics',
-              price: 299.99,
-              image_key: 'products/smart-watch.jpg',
-            }
-          ],
           metadata: {
-            totalUsers: 2,
-            totalProducts: 3,
-            isAdmin: true,
-            accessLevel: 'full',
+            totalImages: filteredImages.length,
+            isAdmin,
+            accessLevel: isAdmin ? 'full' : 'limited',
             timestamp: new Date().toISOString(),
-            note: 'Using fallback mock data',
+            source: 'aws-s3',
+            bucket: bucketName
           },
-          message: 'Admin access - Fallback data (database unavailable)',
+          message: isAdmin 
+            ? `Full gallery access - ${images.length} images from S3` 
+            : `Standard access - 3 images from S3`,
+          s3Bucket: bucketName,
         }),
       };
-    } else {
+      
+    } catch (s3Error: any) {
+      console.error('S3 error:', s3Error);
+      
+      const fallbackImages = getFallbackImages(isAdmin);
+      
       return {
         statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Credentials': true,
         },
         body: JSON.stringify({
-          user: {
-            id: userId,
-            email: userEmail,
-            role: 'standard',
-            groups: userGroups,
-          },
-          userProfile: {
-            id: userId,
-            email: userEmail,
-            role: 'standard',
-            profile_data: { name: 'Standard User', department: 'General' },
-            created_at: new Date().toISOString(),
-          },
-          products: [
-            {
-              id: 2,
-              name: 'Wireless Headphones',
-              description: 'Noise-cancelling headphones',
-              category: 'Audio',
-              price: 249.99,
-              image_key: 'products/headphones.jpg',
-            }
-          ],
+          images: fallbackImages,
           metadata: {
-            totalProducts: 1,
-            isAdmin: false,
-            accessLevel: 'limited',
-            timestamp: new Date().toISOString(),
-            note: 'Using fallback mock data',
+            totalImages: fallbackImages.length,
+            isAdmin,
+            source: 'fallback',
+            note: `S3 access failed: ${s3Error.message}`,
+            bucket: bucketName
           },
-          message: 'Standard access - Fallback data (database unavailable)',
+          message: 'Using fallback data',
         }),
       };
     }
     
   } catch (error: any) {
-    console.error('Unexpected error in handler:', error);
-    console.error('Error stack:', error.stack);
+    console.error('Handler error:', error);
     
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': true,
       },
       body: JSON.stringify({
         error: 'Internal server error',
-        message: error.message || 'Unknown error occurred',
+        message: error.message || 'Failed to retrieve images',
         timestamp: new Date().toISOString(),
+        bucket: process.env.BUCKET_NAME || 'not-set',
+        region: process.env.REGION || 'not-set'
       }),
     };
-  } finally {
-    if (client) {
-      try {
-        await client.end();
-        console.log('Database connection closed');
-      } catch (e: any) {
-        console.error('Error closing database connection:', e.message);
-      }
-    }
   }
 };
+
+function getFallbackImages(isAdmin: boolean): Image[] {
+  const fallback = [
+    { 
+      id: 1, 
+      name: 'laptop.jpg', 
+      url: 'https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=300&h=200&fit=crop', 
+      category: 'Electronics', 
+      size: '45 KB',
+      uploaded: '2024-01-15',
+      description: 'Laptop Pro' 
+    },
+    { 
+      id: 2, 
+      name: 'headphones.jpg', 
+      url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&h=200&fit=crop', 
+      category: 'Audio', 
+      size: '32 KB',
+      uploaded: '2024-01-14',
+      description: 'Wireless Headphones' 
+    },
+    { 
+      id: 3, 
+      name: 'smartwatch.jpg', 
+      url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=300&h=200&fit=crop', 
+      category: 'Wearables', 
+      size: '28 KB',
+      uploaded: '2024-01-13',
+      description: 'Smart Watch' 
+    },
+    { 
+      id: 4, 
+      name: 'speaker.jpg', 
+      url: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=300&h=200&fit=crop', 
+      category: 'Audio', 
+      size: '38 KB',
+      uploaded: '2024-01-12',
+      description: 'Bluetooth Speaker' 
+    },
+    { 
+      id: 5, 
+      name: 'camera.jpg', 
+      url: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=300&h=200&fit=crop', 
+      category: 'Electronics', 
+      size: '42 KB',
+      uploaded: '2024-01-11',
+      description: 'Digital Camera' 
+    },
+  ];
+  
+  return isAdmin ? fallback : fallback.slice(0, 3);
+}
