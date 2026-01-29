@@ -68,15 +68,31 @@ jobs:
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           cd backend
-          npx cdk bootstrap aws://$ACCOUNT_ID/$AWS_REGION || true
+          npx cdk bootstrap aws://$ACCOUNT_ID/$AWS_REGION || echo "CDK already bootstrapped"
 
-      - name: Build and deploy CDK stacks
+      - name: Build CDK
         run: |
           cd backend
           npm run build
-          npx cdk deploy --all --require-approval never
 
-      - name: Display Deployment Info
+      - name: Deploy Database Stack
         run: |
-          echo "Backend deployed successfully"
-          echo "Region: $AWS_REGION"
+          cd backend
+          npx cdk deploy SaasDatabaseStack --require-approval never --no-previous-parameters
+
+      - name: Deploy Backend Stack
+        run: |
+          cd backend
+          npx cdk deploy SaasBackendStack --require-approval never --no-previous-parameters
+
+      - name: Get Deployment Outputs
+        run: |
+          cd backend
+          echo "=== DEPLOYMENT OUTPUTS ==="
+          npx cdk list
+          echo ""
+          echo "=== BACKEND STACK OUTPUTS ==="
+          aws cloudformation describe-stacks \
+            --stack-name SaasBackendStack \
+            --query "Stacks[0].Outputs" \
+            --output table || echo "Could not get outputs"
