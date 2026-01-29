@@ -79,6 +79,7 @@ export class SaasBackendStack extends cdk.Stack {
       },
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
+      functionName: "SaasBackendStack-DataLambda",
     });
 
     const imagesLambda = new lambda.Function(this, "ImagesLambda", {
@@ -92,6 +93,7 @@ export class SaasBackendStack extends cdk.Stack {
       },
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
+      functionName: "SaasBackendStack-ImagesLambda",
     });
 
     imageBucket.grantRead(imagesLambda);
@@ -157,16 +159,58 @@ export class SaasBackendStack extends cdk.Stack {
     const dataResource = api.root.addResource("data");
     const imagesResource = api.root.addResource("images");
 
-    dataResource.addMethod("GET", new apigateway.LambdaIntegration(dataLambda), {
-      authorizer,
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizationScopes: undefined,
+    const dataIntegration = new apigateway.LambdaIntegration(dataLambda, {
+      proxy: true,
+      integrationResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': "'*'",
+            'method.response.header.Access-Control-Allow-Credentials': "'true'",
+          },
+        },
+      ],
     });
 
-    imagesResource.addMethod("GET", new apigateway.LambdaIntegration(imagesLambda), {
+    const imagesIntegration = new apigateway.LambdaIntegration(imagesLambda, {
+      proxy: true,
+      integrationResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': "'*'",
+            'method.response.header.Access-Control-Allow-Credentials': "'true'",
+          },
+        },
+      ],
+    });
+
+    dataResource.addMethod("GET", dataIntegration, {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizationScopes: undefined,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+            'method.response.header.Access-Control-Allow-Credentials': true,
+          },
+        },
+      ],
+    });
+
+    imagesResource.addMethod("GET", imagesIntegration, {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+            'method.response.header.Access-Control-Allow-Credentials': true,
+          },
+        },
+      ],
     });
 
     new cdk.CfnOutput(this, "UserPoolId", { 
@@ -192,6 +236,9 @@ export class SaasBackendStack extends cdk.Stack {
     new cdk.CfnOutput(this, "DatabaseEndpoint", { 
       value: databaseStack.database.dbInstanceEndpointAddress,
     });
+
+    dataLambda.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+    imagesLambda.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
   }
 }
 
